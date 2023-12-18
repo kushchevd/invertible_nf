@@ -59,6 +59,60 @@ def plt_flow(prior_logdensity, transform, ax, npts=100, title="$q(x)$", device="
     ax.set_title(title)
 
 
+def plt_logpz_density(prior_logdensity, inverse_transform, ax, npts=100, memory=100, title="$p_z$", device="cpu"):
+    side = np.linspace(LOW, HIGH, npts)
+    xx, yy = np.meshgrid(side, side)
+    x = np.hstack([xx.reshape(-1, 1), yy.reshape(-1, 1)])
+
+    x = torch.from_numpy(x).type(torch.float32).to(device)
+    zeros = torch.zeros(x.shape[0], 1).to(x)
+
+    z, delta_logp = [], []
+    inds = torch.arange(0, x.shape[0]).to(torch.int64)
+    for ii in torch.split(inds, int(memory**2)):
+        z_, delta_logp_ = inverse_transform(x[ii], zeros[ii])
+        z.append(z_)
+        delta_logp.append(delta_logp_)
+    z = torch.cat(z, 0)
+    delta_logp = torch.cat(delta_logp, 0)
+
+    logpz = prior_logdensity(z).view(z.shape[0], -1).sum(1, keepdim=True)  # logp(z)
+    logpx = logpz
+
+    px = np.exp(logpx.cpu().numpy()).reshape(npts, npts)
+
+    ax.imshow(px, cmap='inferno')
+    ax.get_xaxis().set_ticks([])
+    ax.get_yaxis().set_ticks([])
+    ax.set_title(title)
+
+def plt_deltalogpz_density(prior_logdensity, inverse_transform, ax, npts=100, memory=100, title="$det p_z$", device="cpu"):
+    side = np.linspace(LOW, HIGH, npts)
+    xx, yy = np.meshgrid(side, side)
+    x = np.hstack([xx.reshape(-1, 1), yy.reshape(-1, 1)])
+
+    x = torch.from_numpy(x).type(torch.float32).to(device)
+    zeros = torch.zeros(x.shape[0], 1).to(x)
+
+    z, delta_logp = [], []
+    inds = torch.arange(0, x.shape[0]).to(torch.int64)
+    for ii in torch.split(inds, int(memory**2)):
+        z_, delta_logp_ = inverse_transform(x[ii], zeros[ii])
+        z.append(z_)
+        delta_logp.append(delta_logp_)
+    z = torch.cat(z, 0)
+    delta_logp = torch.cat(delta_logp, 0)
+
+    logpz = prior_logdensity(z).view(z.shape[0], -1).sum(1, keepdim=True)  # logp(z)
+    logpx = delta_logp
+
+    px = np.exp(logpx.cpu().numpy()).reshape(npts, npts)
+
+    ax.imshow(px, cmap='inferno')
+    ax.get_xaxis().set_ticks([])
+    ax.get_yaxis().set_ticks([])
+    ax.set_title(title)   
+
 def plt_flow_density(prior_logdensity, inverse_transform, ax, npts=100, memory=100, title="$q(x)$", device="cpu"):
     side = np.linspace(LOW, HIGH, npts)
     xx, yy = np.meshgrid(side, side)
@@ -115,18 +169,30 @@ def visualize_transform(
 ):
     """Produces visualization for the model density and samples from the model."""
     plt.clf()
-    ax = plt.subplot(1, 3, 1, aspect="equal")
+    ax = plt.subplot(1, 5, 1, aspect="equal")
     if samples:
         plt_samples(potential_or_samples, ax, npts=npts)
     else:
         plt_potential_func(potential_or_samples, ax, npts=npts)
 
-    ax = plt.subplot(1, 3, 2, aspect="equal")
+    ax = plt.subplot(1, 5, 2, aspect="equal")
     if inverse_transform is None:
         plt_flow(prior_density, transform, ax, npts=npts, device=device)
     else:
         plt_flow_density(prior_density, inverse_transform, ax, npts=npts, memory=memory, device=device)
 
-    ax = plt.subplot(1, 3, 3, aspect="equal")
+    ax = plt.subplot(1, 5, 3, aspect="equal")
+    if inverse_transform is None:
+        plt_flow(prior_density, transform, ax, npts=npts, device=device)
+    else:
+        plt_logpz_density(prior_density, inverse_transform, ax, npts=npts, memory=memory, device=device)
+
+    ax = plt.subplot(1, 5, 4, aspect="equal")
+    if inverse_transform is None:
+        plt_flow(prior_density, transform, ax, npts=npts, device=device)
+    else:
+        plt_deltalogpz_density(prior_density, inverse_transform, ax, npts=npts, memory=memory, device=device)
+
+    ax = plt.subplot(1, 5, 5, aspect="equal")
     if transform is not None:
         plt_flow_samples(prior_sample, transform, ax, npts=npts, memory=memory, device=device)
